@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pem
+*.cert
+*.key
+.env
+.aider*
