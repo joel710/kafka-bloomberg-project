@@ -15,6 +15,7 @@ import uvicorn
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import FileResponse
 from kafka import KafkaConsumer, KafkaProducer
+from pymongo import MongoClient
 
 load_dotenv()
 
@@ -24,6 +25,7 @@ KAFKA_PORT = 17498
 KAFKA_URI = f"{KAFKA_HOST}:{KAFKA_PORT}"
 KAFKA_FOLDER = "./"
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+MONGO_URI = "mongodb+srv://jelise710_db_user:msi2025@dji.pzrvgeg.mongodb.net/?appName=dji"
 
 ws_clients = []
 KAFKA_CONNECTED = False
@@ -50,6 +52,7 @@ def get_producer():
             connection_timeout_ms=5000
         )
         KAFKA_CONNECTED = True
+        print("✅ Kafka Connecté")
         return p
     except:
         KAFKA_CONNECTED = False
@@ -62,20 +65,40 @@ def send_to_ws(data):
                 asyncio.run_coroutine_threadsafe(client.send_json(data), main_loop)
             except: pass
 
+# --- MOCK IA (En cas de quota épuisé) ---
+def get_mock_analysis(headline):
+    h = headline.lower()
+    res = {
+        "impact_gold": "NEUTRAL", "impact_eur": "NEUTRAL", 
+        "recommendation": "ATTENDRE", "reason": "Analyse technique standard.", 
+        "forecast": "Marché en consolidation."
+    }
+    if any(w in h for w in ["fed", "rate", "inflation", "dollar", "usd"]):
+        res = {
+            "impact_gold": "BEARISH", "impact_eur": "BULLISH",
+            "recommendation": "VENTE OR", "reason": "Corrélation inverse avec le Dollar US suite aux news macro.",
+            "forecast": "Pression vendeuse sur les métaux précieux."
+        }
+    elif any(w in h for w in ["war", "crisis", "conflict", "uncertainty"]):
+        res = {
+            "impact_gold": "BULLISH", "impact_eur": "NEUTRAL",
+            "recommendation": "ACHETER OR", "reason": "Hausse de la demande pour les valeurs refuges.",
+            "forecast": "Volatilité haussière attendue sur l'Or."
+        }
+    return res
+
 # --- WORKER MARKET ---
 def market_worker():
     producer = get_producer()
     assets = {"GC=F": "XAU/USD", "EURUSD=X": "EUR/USD"}
     prices = {"XAU/USD": 2350.0, "EUR/USD": 1.0850}
-
     while True:
         for ticker, name in assets.items():
             try:
-                t = yf.Ticker(ticker)
-                real_p = t.fast_info['last_price']
-                if real_p and real_p > 0: prices[name] = real_p
+                t = yf.Ticker(ticker); real_p = t.fast_info['last_price']
+                if real_p > 0: prices[name] = real_p
             except: pass
-            jitter = random.uniform(-0.0006, 0.0006) if "EUR" in name else random.uniform(-0.35, 0.35)
+            jitter = random.uniform(-0.0008, 0.0008) if "EUR" in name else random.uniform(-0.4, 0.4)
             display_price = round(prices[name] + jitter, 4)
             msg = {"topic": "market-data", "asset": name, "price": display_price, "timestamp": int(time.time())}
             if KAFKA_CONNECTED and producer:
@@ -89,61 +112,60 @@ def market_worker():
 def ai_news_worker():
     global last_intelligence
     if not GOOGLE_API_KEY: return
-
-    print("🧠 Worker IA: Optimisé pour quotas limités")
+    print("🧠 Worker IA: Mode Hybride Activé")
     producer = get_producer()
     client = genai.Client(api_key=GOOGLE_API_KEY)
     model_id = "gemini-2.0-flash"
     
-    RSS_SOURCES = [
-        "https://www.cnbc.com/id/10000664/device/rss/rss.html",
-        "https://www.investing.com/rss/news_1.rss",
-        "https://www.yahoo.com/news/rss/finance"
-    ]
-    
+    RSS_SOURCES = ["https://www.cnbc.com/id/10000664/device/rss/rss.html", "https://www.yahoo.com/news/rss/finance"]
     seen = set()
+    
     while True:
-        try:
-            for url in RSS_SOURCES:
+        for url in RSS_SOURCES:
+            try:
                 feed = feedparser.parse(url)
                 if feed.entries:
                     entry = feed.entries[0]
                     if entry.title not in seen:
-                        print(f"🔍 ANALYSE MACRO : {entry.title[:50]}...")
-                        
+                        print(f"🔍 ANALYSE : {entry.title[:50]}...")
                         try:
-                            prompt = f"""Expert Macro. Analyse: "{entry.title}". Réponds en FRANÇAIS, UNIQUEMENT en JSON: 
-                            {{"impact_gold": "BULLISH|BEARISH|NEUTRAL", "impact_eur": "BULLISH|BEARISH|NEUTRAL", 
-                            "recommendation": "ACHETER OR|VENTE OR|ACHETER EURO|VENTE EURO|ATTENDRE", 
-                            "reason": "explication causale (15 mots max)", "forecast": "sentiment court terme"}}"""
-                            
+                            prompt = f"Expert Macro. Analyse: '{entry.title}'. Réponds en FRANÇAIS, UNIQUEMENT en JSON: {{'impact_gold': 'BULLISH|BEARISH|NEUTRAL', 'impact_eur': 'BULLISH|BEARISH|NEUTRAL', 'recommendation': 'ACHETER OR|VENTE OR|ACHETER EURO|VENTE EURO|ATTENDRE', 'reason': 'causalité courte', 'forecast': 'sentiment'}}"
                             response = client.models.generate_content(model=model_id, contents=prompt)
                             txt = response.text.strip()
                             if "```json" in txt: txt = txt.split("```json")[1].split("```")[0]
                             elif "```" in txt: txt = txt.split("```")[1].split("```")[0]
-                            
-                            msg = {"topic": "analyzed-news", "headline": entry.title, "source": "Expert Flow", **json.loads(txt)}
-                            last_intelligence = msg
-                            
-                            if KAFKA_CONNECTED and producer:
-                                try: producer.send("analyzed-news", value=msg); producer.flush()
-                                except: pass
-                            
-                            send_to_ws(msg)
-                            seen.add(entry.title)
-                            
-                            # PAUSE CRUCIALE : On attend 60s entre chaque appel IA pour préserver le quota
-                            print("💤 Pause quota (60s)...")
-                            time.sleep(60)
-                            break 
+                            analysis = json.loads(txt)
                         except Exception as e:
-                            if "429" in str(e):
-                                print("⚠️ Quota épuisé. Attente de 30s...")
-                                time.sleep(30)
-                            else:
-                                print(f"AI Error: {e}")
-            time.sleep(20)
-        except: continue
+                            analysis = get_mock_analysis(entry.title)
+                        
+                        msg = {"topic": "analyzed-news", "headline": entry.title, "source": "Expert Flow", **analysis}
+                        last_intelligence = msg
+                        if KAFKA_CONNECTED and producer:
+                            try: producer.send("analyzed-news", value=msg); producer.flush()
+                            except: pass
+                        send_to_ws(msg)
+                        seen.add(entry.title)
+                        time.sleep(90)
+                        break
+            except: continue
+        time.sleep(30)
+
+# --- WORKER DB (Archiviste) ---
+def db_worker():
+    if not MONGO_URI: return
+    print("💾 Worker DB: Start")
+    try:
+        client = MongoClient(MONGO_URI)
+        db = client['dji']
+        if KAFKA_CONNECTED:
+            consumer = KafkaConsumer("market-data", "analyzed-news", bootstrap_servers=KAFKA_URI, security_protocol="SSL", 
+                                     ssl_cafile=KAFKA_FOLDER + "ca.pem", ssl_certfile=KAFKA_FOLDER + "service.cert", 
+                                     ssl_keyfile=KAFKA_FOLDER + "service.key", value_deserializer=lambda x: json.loads(x.decode('utf-8')))
+            for message in consumer:
+                coll = db['market_history'] if message.topic == "market-data" else db['news_history']
+                coll.insert_one(message.value)
+    except Exception as e:
+        print(f"DB Worker Error: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -151,6 +173,7 @@ async def lifespan(app: FastAPI):
     main_loop = asyncio.get_running_loop()
     threading.Thread(target=market_worker, daemon=True).start()
     threading.Thread(target=ai_news_worker, daemon=True).start()
+    threading.Thread(target=db_worker, daemon=True).start()
     yield
 
 app = FastAPI(title="Forex Sentinel", lifespan=lifespan)
@@ -163,11 +186,9 @@ async def get_dashboard():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     ws_clients.append(websocket)
-    if last_intelligence:
-        await websocket.send_json(last_intelligence)
+    if last_intelligence: await websocket.send_json(last_intelligence)
     try:
-        while True:
-            await websocket.receive_text()
+        while True: await websocket.receive_text()
     except: pass
     finally:
         if websocket in ws_clients: ws_clients.remove(websocket)
