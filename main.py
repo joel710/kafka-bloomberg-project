@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 import yfinance as yf
 import feedparser
-import google.generativeai as genai
+from google import genai
 import uvicorn
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import FileResponse
@@ -20,23 +20,13 @@ KAFKA_HOST = "kafka-4238954-kafka-2c1f.h.aivencloud.com"
 KAFKA_PORT = 17498
 KAFKA_URI = f"{KAFKA_HOST}:{KAFKA_PORT}"
 KAFKA_FOLDER = "./"
+# La nouvelle bibliothèque utilise GEMINI_API_KEY par défaut ou une config explicite
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or "AIzaSyA9KxuYHEIHQx6jiciu7PA6g-EDwqPg_Gg"
 
 ws_clients = []
 KAFKA_CONNECTED = False
 main_loop = None
-
-# Message par défaut avec recommandation
-last_intelligence = {
-    "topic": "analyzed-news",
-    "headline": "Système de surveillance actif",
-    "source": "Sentinel",
-    "impact_gold": "NEUTRAL",
-    "impact_eur": "NEUTRAL",
-    "recommendation": "OBSERVATION",
-    "reason": "Initialisation du flux de données.",
-    "forecast": "Marché stable à l'ouverture."
-}
+last_intelligence = None 
 
 def get_kafka_ip():
     try: return socket.gethostbyname(KAFKA_HOST)
@@ -58,8 +48,9 @@ def get_producer():
             connection_timeout_ms=5000
         )
         KAFKA_CONNECTED = True
+        print("✅ Kafka Connecté")
         return p
-    except Exception:
+    except:
         KAFKA_CONNECTED = False
         return None
 
@@ -84,7 +75,7 @@ def market_worker():
                 if real_p and real_p > 0: prices[name] = real_p
             except: pass
             
-            jitter = random.uniform(-0.0005, 0.0005) if "EUR" in name else random.uniform(-0.3, 0.3)
+            jitter = random.uniform(-0.0006, 0.0006) if "EUR" in name else random.uniform(-0.35, 0.35)
             display_price = round(prices[name] + jitter, 4)
             
             msg = {"topic": "market-data", "asset": name, "price": display_price, "timestamp": int(time.time())}
@@ -99,14 +90,16 @@ def market_worker():
 # --- WORKER NEWS + AI ---
 def ai_news_worker():
     global last_intelligence
-    print("🧠 Worker IA: Prêt pour recommandations explicites")
+    print("🧠 Worker IA: Utilisation de la nouvelle SDK google-genai")
     producer = get_producer()
     
-    genai.configure(api_key=GOOGLE_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Initialisation du nouveau client
+    client = genai.Client(api_key=GOOGLE_API_KEY)
+    model_id = "gemini-2.0-flash" # Nouveau modèle ultra-rapide
     
     RSS_SOURCES = [
         "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+        "https://www.investing.com/rss/news_1.rss",
         "https://www.yahoo.com/news/rss/finance"
     ]
     
@@ -118,35 +111,38 @@ def ai_news_worker():
                 if feed.entries:
                     entry = feed.entries[0]
                     if entry.title not in seen:
-                        print(f"🔥 Analyse IA : {entry.title[:50]}...")
+                        print(f"🔍 ANALYSE MACRO (GenAI SDK) : {entry.title[:50]}...")
                         
-                        analysis = {
-                            "impact_gold": "NEUTRAL", 
-                            "impact_eur": "NEUTRAL", 
-                            "recommendation": "WAIT", 
-                            "reason": "Analyse technique", 
-                            "forecast": "Prudence."
-                        }
+                        analysis = {"impact_gold": "NEUTRAL", "impact_eur": "NEUTRAL", "recommendation": "ATTENDRE", "reason": "Calcul...", "forecast": "..."}
                         
                         try:
                             prompt = f"""
-                            En tant qu'expert financier, analyse ce titre: "{entry.title}"
-                            Donne une recommandation d'investissement TRÈS EXPLICITE.
-                            Réponds UNIQUEMENT en JSON strict avec ces clés:
+                            Expert stratège macro-économique. Analyse: "{entry.title}"
+                            Impact sur OR (XAU) et EUR/USD.
+                            Réponse en FRANÇAIS, pro.
+                            Réponds UNIQUEMENT en JSON:
                             {{
                                 "impact_gold": "BULLISH" | "BEARISH" | "NEUTRAL",
                                 "impact_eur": "BULLISH" | "BEARISH" | "NEUTRAL",
-                                "recommendation": "ACHETER OR" | "VENDRE OR" | "ACHETER EURO" | "VENDRE EURO" | "ATTENDRE",
-                                "reason": "explication très courte en français",
-                                "forecast": "prévision courte en français"
+                                "recommendation": "ACHETER OR" | "VENTE OR" | "ACHETER EURO" | "VENTE EURO" | "ATTENDRE",
+                                "reason": "explication causale (15 mots max)",
+                                "forecast": "sentiment court terme"
                             }}
                             """
-                            resp = model.generate_content(prompt)
-                            analysis = json.loads(resp.text.strip().replace("```json", "").replace("```", ""))
+                            response = client.models.generate_content(
+                                model=model_id,
+                                contents=prompt
+                            )
+                            
+                            # Nettoyage JSON
+                            txt = response.text.strip()
+                            if "```json" in txt: txt = txt.split("```json")[1].split("```")[0]
+                            elif "```" in txt: txt = txt.split("```")[1].split("```")[0]
+                            analysis = json.loads(txt)
                         except Exception as e:
-                            print(f"AI Error: {e}")
+                            print(f"AI SDK Error: {e}")
                         
-                        msg = {"topic": "analyzed-news", "headline": entry.title, "source": "Finance RSS", **analysis}
+                        msg = {"topic": "analyzed-news", "headline": entry.title, "source": "Expert Flow", **analysis}
                         last_intelligence = msg
                         
                         if KAFKA_CONNECTED and producer:
@@ -157,7 +153,7 @@ def ai_news_worker():
                         seen.add(entry.title)
                         break
             except: continue
-        time.sleep(30)
+        time.sleep(25)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
