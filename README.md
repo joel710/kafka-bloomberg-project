@@ -1,89 +1,79 @@
-# 🌍 Forex Sentinel: Intelligence de Marché Temps Réel avec Kafka & IA
+# 🌍 Forex Sentinel: Intelligence de Marché Temps Réel (Kafka & IA)
 
-Forex Sentinel est une plateforme de surveillance financière avancée capable d'agréger des flux de données hétérogènes (prix du marché et actualités mondiales) pour générer des recommandations d'investissement en temps réel grâce à l'Intelligence Artificielle.
+Forex Sentinel est un terminal de trading et d'analyse financière de nouvelle génération. Il fusionne la puissance du streaming de données asynchrone avec l'intelligence artificielle pour offrir des recommandations d'investissement ultra-rapides sur l'Or et l'Euro.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![Python](https://img.shields.io/badge/python-3.12+-green)
 ![Kafka](https://img.shields.io/badge/streaming-Kafka-orange)
-![AI](https://img.shields.io/badge/IA-Gemini--1.5-purple)
+![AI](https://img.shields.io/badge/IA-Gemini--2.0--Flash-purple)
+![Design](https://img.shields.io/badge/UI-Liquid--Glass-black)
 
-## 🚀 Architecture du Système
-
-Le projet repose sur une architecture **événementielle (Event-Driven)** totalement découplée grâce à Apache Kafka :
-
-1.  **Ingestion (Producers)** : Flux de données réels depuis Yahoo Finance (Prix) et des flux RSS mondiaux (News).
-2.  **Streaming (Kafka)** : Orchestration et transit des données via un cluster managé sur Aiven.
-3.  **Intelligence (Processeur IA)** : Analyse sémantique des news par **Google Gemini** pour déterminer l'impact et produire des recommandations.
-4.  **Visualisation (Frontend)** : Dashboard temps réel "Liquid Glass" alimenté par WebSockets via FastAPI.
-5.  **Persistance** : Archivage historique de toutes les transactions dans **MongoDB Atlas**.
+## 🚀 Vision du Projet
+L'objectif est de démontrer comment une architecture événementielle (Event-Driven) peut transformer des flux bruts (prix et news) en décisions exploitables. Le système surveille en permanence le prix de l'once d'or (**XAU/USD**) et le taux de change **EUR/USD**, tout en analysant l'impact des dernières nouvelles mondiales (Reuters, CNBC, Investing.com) via un LLM.
 
 ---
 
-## 🛠️ Composants Techniques
+## 🏗️ Architecture Technique
 
-### 📡 Les Producers (Producteurs)
-*   **Market Producer** : Utilise l'API `yfinance` pour extraire le prix spot de l'Or (**XAU/USD**) et le taux de change de l'Euro (**EUR/USD**).
-    *   *Fréquence* : ~1 seconde.
-    *   *Fonctionnalité* : Ajout d'un jitter visuel pour une fluidité totale sur le dashboard.
-*   **News Producer** : Scanne plusieurs flux RSS (CNBC, Yahoo Finance, MarketWatch) pour capturer les événements économiques mondiaux dès leur publication.
+### 1. Ingestion Multi-Source (Producers)
+*   **Market Worker** : Extraction des prix réels via `yfinance`.
+*   **RSS Worker** : Scan intelligent de flux financiers mondiaux.
+*   **Fluctuation Engine** : Ajout d'un jitter visuel pour garantir un affichage dynamique même lors de marchés stables.
 
-### 🧠 Le Processeur d'IA (Consumer/Producer)
-*   **Logique** : Il consomme les news brutes, interroge le LLM **Gemini 1.5 Flash**, et produit un message enrichi.
-*   **Format de sortie** : JSON strict contenant l'impact (Bullish/Bearish), une raison technique et une **recommandation explicite** (ACHETER/VENDRE/ATTENDRE).
+### 2. Cœur de Streaming (Apache Kafka)
+Utilisation d'un cluster managé sur **Aiven** pour assurer le transport des messages :
+*   **Topic `market-data`** : Flux de prix haute fréquence.
+*   **Topic `analyzed-news`** : Flux enrichi contenant les news traitées par l'IA.
 
-### 🌉 Le Pont WebSocket (Bridge)
-*   Implémenté avec **FastAPI**, il sert de passerelle entre le monde binaire de Kafka et le protocole WebSocket du navigateur, garantissant une latence proche de zéro.
+### 3. Intelligence Macro-Économique (Gemini 2.0 Flash)
+Le script agit comme un stratège senior de Goldman Sachs :
+*   **Analyse de Causalité** : Détecte les liens entre les annonces (ex: Hausse des taux FED) et l'impact sur les actifs (ex: Baisse de l'Or).
+*   **Conseils Explicites** : Recommande des actions concrètes : **ACHETER**, **VENDRE** ou **ATTENDRE**.
+*   **Gestion de Quota** : Système de pause intelligent pour respecter les limites de l'API gratuite Google.
+
+### 4. Interface "Liquid Glass" (Frontend)
+Une interface web moderne développée en Vanilla JS/CSS :
+*   **Glassmorphism** : Effets de transparence et de flou (Backdrop Filter).
+*   **Real-time WebSockets** : Mise à jour instantanée sans rafraîchissement.
+*   **Code Couleur Dynamique** : Vert (Bullish/Up), Rouge (Bearish/Down), Or (Premium).
 
 ---
 
-## 💻 Installation et Lancement
+## 🛠️ Installation et Configuration
 
-### Préréquis
-*   Un cluster Kafka (ex: **Aiven**) avec les certificats SSL (`ca.pem`, `service.cert`, `service.key`).
-*   Une clé API **Google Gemini** (gratuite sur AI Studio).
-*   Une instance **MongoDB** (pour l'archivage).
+### Prérequis
+*   Python 3.12+
+*   Un cluster Kafka (Aiven recommandé)
+*   Une clé API Google Gemini
 
-### Installation
+### Setup Rapide
 ```bash
-# Cloner le projet
+# 1. Cloner le dépôt
 git clone https://github.com/joel710/kafka-bloomberg-project.git
 cd kafka-bloomberg-project
 
-# Créer l'environnement virtuel
-python3 -m venv venv
-source venv/bin/activate
+# 2. Installer les dépendances
+pip install -r requirements.txt
 
-# Installer les dépendances
-pip install fastapi uvicorn kafka-python-ng yfinance feedparser google-generativeai pymongo
+# 3. Configurer l'environnement
+# Créer un fichier .env à la racine
+echo "GOOGLE_API_KEY=votre_cle_ici" > .env
 ```
 
-### Lancement Unifié
-Le projet est conçu pour être lancé avec une seule commande gérant tous les workers en parallèle :
+### Lancement
 ```bash
-export GOOGLE_API_KEY="VOTRE_CLE_GEMINI"
-python3 main.py
+python main.py
 ```
-Accédez ensuite au dashboard sur : `http://localhost:8000`
+Le serveur sera disponible sur `http://localhost:8000`.
 
 ---
 
-## 📊 APIs Utilisées
-*   **Yahoo Finance (`yfinance`)** : Flux de prix boursiers en direct.
-*   **Google Gemini AI** : Analyse sémantique et aide à la décision.
-*   **Aiven Kafka** : Infrastructure de message-broker hautement disponible.
-*   **CNBC / Yahoo / Reuters** : Sources d'actualités via RSS.
+## 📊 Détails de l'Analyse Financière
+*   **XAU / USD** : Représente le prix d'une once d'or. L'IA surveille ce prix comme baromètre de l'incertitude géopolitique.
+*   **EUR / USD** : Principal indicateur de la santé économique européenne face au Dollar.
 
-## 🎨 Interface Utilisateur
-Le Dashboard utilise les dernières tendances du Web Design :
-*   **Glassmorphism** : Effets de flou et de transparence (Liquid Glass).
-*   **Dark Mode Pro** : Palette de couleurs inspirée des terminaux Bloomberg.
-*   **Dynamic Visuals** : Changement de couleur instantané (Vert/Rouge) selon les variations de prix.
+## 🛡️ Résilience (Mode Hybride)
+Le projet est conçu pour être "Demo-Proof". Si la connexion Kafka échoue, le système bascule automatiquement en **Mode Direct (WebSocket interne)**. Cela garantit que votre présentation fonctionnera même dans des conditions réseau difficiles.
 
 ---
-
-## 🔒 Sécurité
-*   Les certificats SSL ne sont jamais inclus dans le dépôt.
-*   La gestion de la clé API se fait via les variables d'environnement.
-
----
-*Projet réalisé pour démontrer la puissance du traitement de données en temps réel avec Kafka.*
+*Projet réalisé pour illustrer la synergie entre le Big Data (Kafka), l'IA (Gemini) et le Web moderne.*
