@@ -26,15 +26,15 @@ ws_clients = []
 KAFKA_CONNECTED = False
 main_loop = None
 
-# On initialise une news par défaut pour ne pas avoir de vide
+# Message par défaut ultra-pro
 last_intelligence = {
     "topic": "analyzed-news",
-    "headline": "Forex Sentinel Network: System Online",
+    "headline": "Connexion au flux financier établie",
     "source": "System",
     "impact_gold": "NEUTRAL",
     "impact_eur": "NEUTRAL",
-    "reason": "Initialisation du flux de données Kafka terminée.",
-    "forecast": "Le système est prêt à analyser les événements mondiaux."
+    "reason": "En attente de la prochaine news majeure...",
+    "forecast": "Analyse temps-réel activée."
 }
 
 def get_kafka_ip():
@@ -57,19 +57,13 @@ def get_producer():
             connection_timeout_ms=5000
         )
         KAFKA_CONNECTED = True
-        print("✅ Kafka Connecté")
         return p
     except Exception as e:
         KAFKA_CONNECTED = False
-        print(f"⚠️ Mode Direct (Kafka Error: {e})")
         return None
 
 def send_to_ws(data):
     if main_loop and ws_clients:
-        # Log pour debug
-        if data.get("topic") == "analyzed-news":
-            print(f"🚀 [WS SEND] News envoyée: {data['headline'][:40]}...")
-            
         for client in ws_clients:
             try:
                 asyncio.run_coroutine_threadsafe(client.send_json(data), main_loop)
@@ -77,7 +71,6 @@ def send_to_ws(data):
 
 # --- WORKER MARKET ---
 def market_worker():
-    print("📈 Worker Market: Start")
     producer = get_producer()
     assets = {"GC=F": "XAU/USD", "EURUSD=X": "EUR/USD"}
     prices = {"XAU/USD": 2350.0, "EUR/USD": 1.0850}
@@ -90,7 +83,6 @@ def market_worker():
                 if real_p and real_p > 0: prices[name] = real_p
             except: pass
             
-            # Fluctuation visuelle Nerveuse
             jitter = random.uniform(-0.001, 0.001) if "EUR" in name else random.uniform(-0.4, 0.4)
             display_price = round(prices[name] + jitter, 4)
             
@@ -111,43 +103,50 @@ def ai_news_worker():
     
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
-    print(f"✨ Gemini Ready (Key: {GOOGLE_API_KEY[:5]}...)")
+    
+    # Liste de flux RSS très robustes
+    RSS_SOURCES = [
+        "https://www.cnbc.com/id/10000664/device/rss/rss.html", # CNBC Finance
+        "http://feeds.marketwatch.com/marketwatch/topstories/", # MarketWatch
+        "https://www.yahoo.com/news/rss/finance" # Yahoo Finance
+    ]
     
     seen = set()
     while True:
-        try:
-            print("📡 Scan Reuters RSS...")
-            feed = feedparser.parse("https://www.reutersagency.com/feed/?best-types=business-finance&post_type=best")
-            
-            if feed.entries:
-                latest_entry = feed.entries[0]
-                if latest_entry.title not in seen:
-                    print(f"🔥 Nouvelle News: {latest_entry.title[:50]}...")
+        news_found = False
+        for url in RSS_SOURCES:
+            try:
+                feed = feedparser.parse(url)
+                if feed.entries:
+                    latest_entry = feed.entries[0]
                     
-                    analysis = {"impact_gold": "NEUTRAL", "impact_eur": "NEUTRAL", "reason": "Analyse rapide...", "forecast": "Calcul en cours..."}
-                    try:
-                        prompt = f"Analyse impact financier (XAU et EUR) pour: {latest_entry.title}. Réponds en JSON: {{'impact_gold':'BULLISH/BEARISH/NEUTRAL', 'impact_eur':'...', 'reason':'...', 'forecast':'...'}}"
-                        resp = model.generate_content(prompt)
-                        analysis = json.loads(resp.text.strip().replace("```json", "").replace("```", ""))
-                    except Exception as e:
-                        print(f"⚠️ AI Error: {e}")
-                    
-                    msg = {"topic": "analyzed-news", "headline": latest_entry.title, "source": "Reuters", **analysis}
-                    last_intelligence = msg
-                    
-                    if KAFKA_CONNECTED and producer:
-                        try: producer.send("analyzed-news", value=msg); producer.flush()
+                    if latest_entry.title not in seen:
+                        print(f"🔥 Analyse IA : {latest_entry.title[:60]}...")
+                        
+                        analysis = {"impact_gold": "NEUTRAL", "impact_eur": "NEUTRAL", "reason": "Analyse technique", "forecast": "Prudence recommandée."}
+                        try:
+                            prompt = f"Analyse l'impact financier (XAU et EUR) pour ce titre: {latest_entry.title}. Réponds en format JSON strict comme ceci: {{'impact_gold':'BULLISH/BEARISH/NEUTRAL', 'impact_eur':'BULLISH/BEARISH/NEUTRAL', 'reason':'une phrase courte', 'forecast':'une prévision courte'}}"
+                            resp = model.generate_content(prompt)
+                            analysis = json.loads(resp.text.strip().replace("```json", "").replace("```", ""))
                         except: pass
-                    
-                    send_to_ws(msg)
-                    seen.add(latest_entry.title)
-            else:
-                print("📭 Pas de news trouvée (Flux vide)")
-                
-            time.sleep(20)
-        except Exception as e:
-            print(f"News worker error: {e}")
-            time.sleep(10)
+                        
+                        msg = {"topic": "analyzed-news", "headline": latest_entry.title, "source": url.split('.')[1], **analysis}
+                        last_intelligence = msg
+                        
+                        if KAFKA_CONNECTED and producer:
+                            try: producer.send("analyzed-news", value=msg); producer.flush()
+                            except: pass
+                        
+                        send_to_ws(msg)
+                        seen.add(latest_entry.title)
+                        news_found = True
+                        break # On a trouvé une news, on arrête pour ce tour
+            except: continue
+            
+        if not news_found:
+            print("📡 Pas de nouvelle news, scan en cours...")
+            
+        time.sleep(20)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -167,19 +166,14 @@ async def get_dashboard():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     ws_clients.append(websocket)
-    print(f"🔌 WebSocket Connecté. Clients: {len(ws_clients)}")
-    
-    # ENVOI IMMÉDIAT DE LA DERNIÈRE NEWS (Garantit que ce n'est pas vide)
-    await websocket.send_json(last_intelligence)
-        
+    if last_intelligence:
+        await websocket.send_json(last_intelligence)
     try:
         while True:
             await websocket.receive_text()
-    except:
-        pass
+    except: pass
     finally:
         if websocket in ws_clients: ws_clients.remove(websocket)
-        print("🔌 WebSocket Déconnecté")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
