@@ -26,15 +26,16 @@ ws_clients = []
 KAFKA_CONNECTED = False
 main_loop = None
 
-# Message par défaut ultra-pro
+# Message par défaut avec recommandation
 last_intelligence = {
     "topic": "analyzed-news",
-    "headline": "Connexion au flux financier établie",
-    "source": "System",
+    "headline": "Système de surveillance actif",
+    "source": "Sentinel",
     "impact_gold": "NEUTRAL",
     "impact_eur": "NEUTRAL",
-    "reason": "En attente de la prochaine news majeure...",
-    "forecast": "Analyse temps-réel activée."
+    "recommendation": "OBSERVATION",
+    "reason": "Initialisation du flux de données.",
+    "forecast": "Marché stable à l'ouverture."
 }
 
 def get_kafka_ip():
@@ -58,7 +59,7 @@ def get_producer():
         )
         KAFKA_CONNECTED = True
         return p
-    except Exception as e:
+    except Exception:
         KAFKA_CONNECTED = False
         return None
 
@@ -83,7 +84,7 @@ def market_worker():
                 if real_p and real_p > 0: prices[name] = real_p
             except: pass
             
-            jitter = random.uniform(-0.001, 0.001) if "EUR" in name else random.uniform(-0.4, 0.4)
+            jitter = random.uniform(-0.0005, 0.0005) if "EUR" in name else random.uniform(-0.3, 0.3)
             display_price = round(prices[name] + jitter, 4)
             
             msg = {"topic": "market-data", "asset": name, "price": display_price, "timestamp": int(time.time())}
@@ -98,39 +99,54 @@ def market_worker():
 # --- WORKER NEWS + AI ---
 def ai_news_worker():
     global last_intelligence
-    print("🧠 Worker AI & News: Start")
+    print("🧠 Worker IA: Prêt pour recommandations explicites")
     producer = get_producer()
     
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
     
-    # Liste de flux RSS très robustes
     RSS_SOURCES = [
-        "https://www.cnbc.com/id/10000664/device/rss/rss.html", # CNBC Finance
-        "http://feeds.marketwatch.com/marketwatch/topstories/", # MarketWatch
-        "https://www.yahoo.com/news/rss/finance" # Yahoo Finance
+        "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+        "https://www.yahoo.com/news/rss/finance"
     ]
     
     seen = set()
     while True:
-        news_found = False
         for url in RSS_SOURCES:
             try:
                 feed = feedparser.parse(url)
                 if feed.entries:
-                    latest_entry = feed.entries[0]
-                    
-                    if latest_entry.title not in seen:
-                        print(f"🔥 Analyse IA : {latest_entry.title[:60]}...")
+                    entry = feed.entries[0]
+                    if entry.title not in seen:
+                        print(f"🔥 Analyse IA : {entry.title[:50]}...")
                         
-                        analysis = {"impact_gold": "NEUTRAL", "impact_eur": "NEUTRAL", "reason": "Analyse technique", "forecast": "Prudence recommandée."}
+                        analysis = {
+                            "impact_gold": "NEUTRAL", 
+                            "impact_eur": "NEUTRAL", 
+                            "recommendation": "WAIT", 
+                            "reason": "Analyse technique", 
+                            "forecast": "Prudence."
+                        }
+                        
                         try:
-                            prompt = f"Analyse l'impact financier (XAU et EUR) pour ce titre: {latest_entry.title}. Réponds en format JSON strict comme ceci: {{'impact_gold':'BULLISH/BEARISH/NEUTRAL', 'impact_eur':'BULLISH/BEARISH/NEUTRAL', 'reason':'une phrase courte', 'forecast':'une prévision courte'}}"
+                            prompt = f"""
+                            En tant qu'expert financier, analyse ce titre: "{entry.title}"
+                            Donne une recommandation d'investissement TRÈS EXPLICITE.
+                            Réponds UNIQUEMENT en JSON strict avec ces clés:
+                            {{
+                                "impact_gold": "BULLISH" | "BEARISH" | "NEUTRAL",
+                                "impact_eur": "BULLISH" | "BEARISH" | "NEUTRAL",
+                                "recommendation": "ACHETER OR" | "VENDRE OR" | "ACHETER EURO" | "VENDRE EURO" | "ATTENDRE",
+                                "reason": "explication très courte en français",
+                                "forecast": "prévision courte en français"
+                            }}
+                            """
                             resp = model.generate_content(prompt)
                             analysis = json.loads(resp.text.strip().replace("```json", "").replace("```", ""))
-                        except: pass
+                        except Exception as e:
+                            print(f"AI Error: {e}")
                         
-                        msg = {"topic": "analyzed-news", "headline": latest_entry.title, "source": url.split('.')[1], **analysis}
+                        msg = {"topic": "analyzed-news", "headline": entry.title, "source": "Finance RSS", **analysis}
                         last_intelligence = msg
                         
                         if KAFKA_CONNECTED and producer:
@@ -138,15 +154,10 @@ def ai_news_worker():
                             except: pass
                         
                         send_to_ws(msg)
-                        seen.add(latest_entry.title)
-                        news_found = True
-                        break # On a trouvé une news, on arrête pour ce tour
+                        seen.add(entry.title)
+                        break
             except: continue
-            
-        if not news_found:
-            print("📡 Pas de nouvelle news, scan en cours...")
-            
-        time.sleep(20)
+        time.sleep(30)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

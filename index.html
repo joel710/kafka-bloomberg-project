@@ -17,336 +17,170 @@
             --text-dim: rgba(255, 255, 255, 0.6);
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Inter', sans-serif;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
 
         body {
             background: radial-gradient(circle at top right, #1a1a2e, #0f0f1b, #000000);
             color: var(--text-main);
             min-height: 100vh;
-            overflow-x: hidden;
+            padding: 40px 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 40px 20px;
         }
 
-        /* Mesh Gradient Background Elements */
         .bg-glow {
-            position: fixed;
-            width: 600px;
-            height: 600px;
+            position: fixed; width: 600px; height: 600px;
             background: radial-gradient(circle, rgba(0, 122, 255, 0.15) 0%, transparent 70%);
-            top: -100px;
-            right: -100px;
-            z-index: -1;
-            filter: blur(80px);
+            top: -100px; right: -100px; z-index: -1; filter: blur(80px);
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 60px;
-            animation: fadeIn 1s ease-out;
-        }
+        .header { text-align: center; margin-bottom: 40px; }
+        .header h1 { font-size: 2.5rem; letter-spacing: -1px; background: linear-gradient(to bottom, #fff, #999); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .header p { color: var(--text-dim); text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem; }
 
-        .header h1 {
-            font-size: 2.5rem;
-            font-weight: 700;
-            letter-spacing: -1px;
-            margin-bottom: 10px;
-            background: linear-gradient(to bottom, #fff, #999);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
+        .dashboard { display: grid; grid-template-columns: 1fr 1.5fr; gap: 30px; max-width: 1200px; width: 100%; }
 
-        .header p {
-            color: var(--text-dim);
-            font-size: 1rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
-        .dashboard {
-            display: grid;
-            grid-template-columns: 1fr 1.5fr;
-            gap: 30px;
-            max-width: 1200px;
-            width: 100%;
-            animation: fadeInUp 1s ease-out;
-        }
-
-        /* Glass Card Style */
         .glass-card {
             background: var(--glass-bg);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--glass-border);
             border-radius: 24px;
-            padding: 30px;
+            padding: 25px;
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
         }
 
-        .market-grid {
-            display: grid;
-            gap: 20px;
-        }
-
         .price-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.03);
-            transition: transform 0.3s ease;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 20px; border-radius: 16px; background: rgba(255, 255, 255, 0.03);
+            margin-bottom: 15px; transition: transform 0.2s;
+        }
+        .price-item:hover { transform: scale(1.02); }
+        .price-value { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+        .recommendation-banner {
+            background: linear-gradient(135deg, rgba(0, 122, 255, 0.2), rgba(255, 255, 255, 0.05));
+            border: 1px solid var(--accent-blue);
+            padding: 20px; border-radius: 20px; margin-bottom: 20px;
+            text-align: center;
         }
 
-        .price-item:hover {
-            transform: scale(1.02);
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .price-label {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .price-label img {
-            width: 24px;
-            height: 24px;
-        }
-
-        .price-value {
-            font-size: 1.5rem;
-            font-weight: 600;
-            font-variant-numeric: tabular-nums;
-        }
-
-        .news-section {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .intelligence-panel {
-            background: linear-gradient(135deg, rgba(0, 122, 255, 0.1), rgba(255, 255, 255, 0.05));
-            border: 1px solid rgba(0, 122, 255, 0.2);
-            padding: 25px;
-        }
-
-        .prediction-box {
-            margin-top: 15px;
-            padding: 15px;
-            border-radius: 12px;
-            background: rgba(0, 0, 0, 0.2);
-            border-left: 4px solid var(--accent-blue);
+        .rec-action {
+            font-size: 1.8rem; font-weight: 800; text-transform: uppercase;
+            letter-spacing: 1px; margin: 10px 0;
+            color: var(--accent-gold);
         }
 
         .impact-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            margin-right: 8px;
+            display: inline-block; padding: 4px 12px; border-radius: 20px;
+            font-size: 0.75rem; font-weight: 700; margin-right: 8px;
         }
-
         .bullish { background: rgba(52, 199, 89, 0.2); color: var(--accent-green); }
         .bearish { background: rgba(255, 59, 48, 0.2); color: var(--accent-red); }
         .neutral { background: rgba(255, 255, 255, 0.1); color: var(--text-dim); }
 
-        .news-feed {
-            max-height: 400px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            padding-right: 10px;
-        }
+        .news-card { padding: 15px; border-radius: 12px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--glass-border); margin-bottom: 10px; }
+        .news-card h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 5px; }
+        .news-meta { font-size: 0.7rem; color: var(--text-dim); }
 
-        .news-feed::-webkit-scrollbar { width: 4px; }
-        .news-feed::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 10px; }
-
-        .news-card {
-            padding: 15px;
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid var(--glass-border);
-            animation: slideInLeft 0.5s ease-out;
-        }
-
-        .news-card h4 {
-            font-size: 0.9rem;
-            margin-bottom: 5px;
-        }
-
-        .news-meta {
-            font-size: 0.75rem;
-            color: var(--text-dim);
-        }
-
-        /* Animations */
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes slideInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
-
-        .price-up { color: var(--accent-green); transition: color 0.3s; }
-        .price-down { color: var(--accent-red); transition: color 0.3s; }
-
-        .live-indicator {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            background: var(--accent-green);
-            border-radius: 50%;
-            margin-right: 8px;
-            box-shadow: 0 0 10px var(--accent-green);
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        .price-up { color: var(--accent-green); text-shadow: 0 0 10px var(--accent-green); }
+        .price-down { color: var(--accent-red); text-shadow: 0 0 10px var(--accent-red); }
     </style>
 </head>
 <body>
     <div class="bg-glow"></div>
-    
     <div class="header">
-        <p><span class="live-indicator"></span> Real-Time Network Status: Connected</p>
-        <h1>Global Market Intelligence</h1>
+        <p>Live Market Intelligence • Kafka Powered</p>
+        <h1>Sentinel Terminal</h1>
     </div>
 
     <div class="dashboard">
-        <!-- Section Gauche : Marché -->
         <div class="market-section">
-            <div class="glass-card market-grid">
-                <h3 style="margin-bottom: 10px;">Live Assets</h3>
-                
-                <div class="price-item" id="card-XAU">
-                    <div class="price-label">
-                        <span style="font-size: 1.5rem;">💰</span>
-                        <div>
-                            <div style="font-weight: 600;">Gold Spot</div>
-                            <div class="news-meta">XAU / USD</div>
-                        </div>
+            <div class="glass-card">
+                <h3 style="margin-bottom: 20px;">Asset Tracking</h3>
+                <div class="price-item">
+                    <div>
+                        <div style="font-weight: 600;">Gold Spot (XAU/USD)</div>
+                        <div class="news-meta">Prix pour 1 once d'or</div>
                     </div>
                     <div class="price-value" id="price-XAU">0.00</div>
                 </div>
-
-                <div class="price-item" id="card-EUR">
-                    <div class="price-label">
-                        <span style="font-size: 1.5rem;">💶</span>
-                        <div>
-                            <div style="font-weight: 600;">Euro / USD</div>
-                            <div class="news-meta">EUR / USD</div>
-                        </div>
+                <div class="price-item">
+                    <div>
+                        <div style="font-weight: 600;">Euro (EUR/USD)</div>
+                        <div class="news-meta">Valeur de 1€ en Dollars</div>
                     </div>
                     <div class="price-value" id="price-EUR">0.0000</div>
+                </div>
+                <div style="margin-top: 20px; font-size: 0.8rem; color: var(--text-dim);">
+                    <p>💡 <b>XAU</b> monte = L'or se renforce.</p>
+                    <p>💡 <b>EUR</b> baisse = Le Dollar se renforce.</p>
                 </div>
             </div>
         </div>
 
-        <!-- Section Droite : Intelligence -->
-        <div class="news-section">
-            <div class="glass-card intelligence-panel" id="intel-panel">
-                <h3 style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
-                    <span>🧠</span> AI Intelligence Report
-                </h3>
-                <div id="intel-content">
-                    <p style="color: var(--text-dim);">Waiting for the next global event analysis...</p>
-                </div>
-            </div>
-
+        <div class="intelligence-section">
             <div class="glass-card">
-                <h3 style="margin-bottom: 15px;">Global Feed</h3>
-                <div class="news-feed" id="news-feed">
-                    <!-- Les news arriveront ici -->
+                <div class="recommendation-banner">
+                    <p style="font-size: 0.8rem; text-transform: uppercase; color: var(--accent-blue);">Conseil IA Expert</p>
+                    <div class="rec-action" id="ai-rec">OBSERVATION</div>
+                    <div id="ai-reason" style="font-size: 0.9rem; opacity: 0.9;">Analyse du marché en cours...</div>
+                </div>
+
+                <div id="news-details">
+                    <h4 id="news-title" style="margin-bottom: 10px;">En attente de nouvelles...</h4>
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <span id="badge-gold" class="impact-badge neutral">GOLD: -</span>
+                        <span id="badge-eur" class="impact-badge neutral">EURO: -</span>
+                    </div>
+                    <div style="padding: 15px; background: rgba(0,0,0,0.2); border-radius: 12px; font-size: 0.9rem; border-left: 3px solid var(--accent-gold);">
+                        <b>Prévision :</b> <span id="ai-forecast">-</span>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsHost = window.location.hostname || '127.0.0.1';
-        const socket = new WebSocket(`${wsProtocol}//${wsHost}:8000/ws`);
-        
-        console.log("Tentative de connexion WebSocket sur :", socket.url);
-        
+        const socket = new WebSocket(`ws://${wsHost}:8000/ws`);
         let lastPrices = { 'XAU/USD': 0, 'EUR/USD': 0 };
 
         socket.onmessage = function(event) {
             const data = JSON.parse(event.data);
-            
-            if (data.topic === 'market-data') {
-                updatePrice(data.asset, data.price);
-            } else if (data.topic === 'analyzed-news') {
-                updateIntelligence(data);
-                addNewsFeed(data);
-            }
+            if (data.topic === 'market-data') updatePrice(data.asset, data.price);
+            if (data.topic === 'analyzed-news') updateAI(data);
         };
 
         function updatePrice(asset, price) {
-            const symbol = asset === 'XAU/USD' ? 'XAU' : 'EUR';
-            const el = document.getElementById(`price-${symbol}`);
-            if (!el) return;
-
-            // Animation de couleur pour le changement de prix
-            if (price > lastPrices[asset]) {
-                el.classList.add('price-up');
-                setTimeout(() => el.classList.remove('price-up'), 1000);
-            } else if (price < lastPrices[asset]) {
-                el.classList.add('price-down');
-                setTimeout(() => el.classList.remove('price-down'), 1000);
-            }
-
-            el.innerText = price.toFixed(symbol === 'XAU' ? 2 : 4);
+            const id = asset === 'XAU/USD' ? 'price-XAU' : 'price-EUR';
+            const el = document.getElementById(id);
+            if (price > lastPrices[asset]) { el.className = 'price-value price-up'; }
+            else if (price < lastPrices[asset]) { el.className = 'price-value price-down'; }
+            el.innerText = price.toFixed(asset === 'XAU/USD' ? 2 : 4);
             lastPrices[asset] = price;
         }
 
-        function updateIntelligence(data) {
-            const container = document.getElementById('intel-content');
+        function updateAI(data) {
+            document.getElementById('ai-rec').innerText = data.recommendation;
+            document.getElementById('ai-reason').innerText = data.reason;
+            document.getElementById('news-title').innerText = data.headline;
+            document.getElementById('ai-forecast').innerText = data.forecast;
+
+            const bGold = document.getElementById('badge-gold');
+            bGold.innerText = `GOLD: ${data.impact_gold}`;
+            bGold.className = `impact-badge ${data.impact_gold.toLowerCase()}`;
+
+            const bEur = document.getElementById('badge-eur');
+            bEur.innerText = `EURO: ${data.impact_eur}`;
+            bEur.className = `impact-badge ${data.impact_eur.toLowerCase()}`;
             
-            const impactGoldClass = data.impact_gold.toLowerCase();
-            const impactEurClass = data.impact_eur.toLowerCase();
-
-            container.innerHTML = `
-                <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 10px;">${data.headline}</div>
-                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                    <span class="impact-badge ${impactGoldClass}">Gold: ${data.impact_gold}</span>
-                    <span class="impact-badge ${impactEurClass}">Euro: ${data.impact_eur}</span>
-                </div>
-                <div class="prediction-box">
-                    <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--accent-blue); margin-bottom: 5px; font-weight: 700;">AI Forecast</div>
-                    <div style="font-size: 0.95rem;">${data.forecast}</div>
-                    <div style="font-size: 0.8rem; color: var(--text-dim); margin-top: 8px;">Reason: ${data.reason}</div>
-                </div>
-            `;
+            // Animation de mise à jour
+            const banner = document.querySelector('.recommendation-banner');
+            banner.style.boxShadow = "0 0 30px rgba(0, 122, 255, 0.4)";
+            setTimeout(() => banner.style.boxShadow = "none", 1000);
         }
-
-        function addNewsFeed(data) {
-            const feed = document.getElementById('news-feed');
-            const card = document.createElement('div');
-            card.className = 'news-card';
-            card.innerHTML = `
-                <h4>${data.headline}</h4>
-                <div class="news-meta">${data.source.toUpperCase()} • ${new Date().toLocaleTimeString()}</div>
-            `;
-            feed.prepend(card);
-            
-            // Garder seulement les 10 dernières news
-            if (feed.children.length > 10) {
-                feed.removeChild(feed.lastChild);
-            }
-        }
-
-        socket.onopen = () => console.log('WebSocket Connected');
-        socket.onclose = () => console.log('WebSocket Disconnected');
     </script>
 </body>
 </html>
