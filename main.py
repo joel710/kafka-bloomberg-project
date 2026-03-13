@@ -7,6 +7,7 @@ import socket
 import random
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 import yfinance as yf
 import feedparser
 from google import genai
@@ -14,6 +15,9 @@ import uvicorn
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import FileResponse
 from kafka import KafkaConsumer, KafkaProducer
+
+# CHARGEMENT DES VARIABLES D'ENVIRONNEMENT (.env)
+load_dotenv()
 
 # --- CONFIGURATION ---
 KAFKA_HOST = "kafka-4238954-kafka-2c1f.h.aivencloud.com"
@@ -92,10 +96,10 @@ def market_worker():
 def ai_news_worker():
     global last_intelligence
     if not GOOGLE_API_KEY:
-        print("❌ ERREUR : La variable GOOGLE_API_KEY n'est pas définie !")
+        print("❌ ERREUR : La variable GOOGLE_API_KEY n'est pas définie dans le .env !")
         return
 
-    print("🧠 Worker IA: Expert Macro-Economique en cours...")
+    print("🧠 Worker IA: Expert Macro-Economique opérationnel...")
     producer = get_producer()
     
     client = genai.Client(api_key=GOOGLE_API_KEY)
