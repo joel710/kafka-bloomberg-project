@@ -20,8 +20,9 @@ KAFKA_HOST = "kafka-4238954-kafka-2c1f.h.aivencloud.com"
 KAFKA_PORT = 17498
 KAFKA_URI = f"{KAFKA_HOST}:{KAFKA_PORT}"
 KAFKA_FOLDER = "./"
-# La nouvelle bibliothèque utilise GEMINI_API_KEY par défaut ou une config explicite
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or "AIzaSyA9KxuYHEIHQx6jiciu7PA6g-EDwqPg_Gg"
+
+# RÉCUPÉRATION SÉCURISÉE DE LA CLÉ
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 ws_clients = []
 KAFKA_CONNECTED = False
@@ -90,12 +91,15 @@ def market_worker():
 # --- WORKER NEWS + AI ---
 def ai_news_worker():
     global last_intelligence
-    print("🧠 Worker IA: Utilisation de la nouvelle SDK google-genai")
+    if not GOOGLE_API_KEY:
+        print("❌ ERREUR : La variable GOOGLE_API_KEY n'est pas définie !")
+        return
+
+    print("🧠 Worker IA: Expert Macro-Economique en cours...")
     producer = get_producer()
     
-    # Initialisation du nouveau client
     client = genai.Client(api_key=GOOGLE_API_KEY)
-    model_id = "gemini-2.0-flash" # Nouveau modèle ultra-rapide
+    model_id = "gemini-2.0-flash"
     
     RSS_SOURCES = [
         "https://www.cnbc.com/id/10000664/device/rss/rss.html",
@@ -111,9 +115,7 @@ def ai_news_worker():
                 if feed.entries:
                     entry = feed.entries[0]
                     if entry.title not in seen:
-                        print(f"🔍 ANALYSE MACRO (GenAI SDK) : {entry.title[:50]}...")
-                        
-                        analysis = {"impact_gold": "NEUTRAL", "impact_eur": "NEUTRAL", "recommendation": "ATTENDRE", "reason": "Calcul...", "forecast": "..."}
+                        print(f"🔍 ANALYSE MACRO : {entry.title[:50]}...")
                         
                         try:
                             prompt = f"""
@@ -129,29 +131,25 @@ def ai_news_worker():
                                 "forecast": "sentiment court terme"
                             }}
                             """
-                            response = client.models.generate_content(
-                                model=model_id,
-                                contents=prompt
-                            )
+                            response = client.models.generate_content(model=model_id, contents=prompt)
                             
-                            # Nettoyage JSON
                             txt = response.text.strip()
                             if "```json" in txt: txt = txt.split("```json")[1].split("```")[0]
                             elif "```" in txt: txt = txt.split("```")[1].split("```")[0]
                             analysis = json.loads(txt)
+                            
+                            msg = {"topic": "analyzed-news", "headline": entry.title, "source": "Expert Flow", **analysis}
+                            last_intelligence = msg
+                            
+                            if KAFKA_CONNECTED and producer:
+                                try: producer.send("analyzed-news", value=msg); producer.flush()
+                                except: pass
+                            
+                            send_to_ws(msg)
+                            seen.add(entry.title)
+                            break
                         except Exception as e:
                             print(f"AI SDK Error: {e}")
-                        
-                        msg = {"topic": "analyzed-news", "headline": entry.title, "source": "Expert Flow", **analysis}
-                        last_intelligence = msg
-                        
-                        if KAFKA_CONNECTED and producer:
-                            try: producer.send("analyzed-news", value=msg); producer.flush()
-                            except: pass
-                        
-                        send_to_ws(msg)
-                        seen.add(entry.title)
-                        break
             except: continue
         time.sleep(25)
 
