@@ -49,14 +49,25 @@ last_intelligence = {
 }
 
 def get_kafka_ip():
-    try: return socket.gethostbyname(KAFKA_HOST)
-    except: return KAFKA_HOST
+    try:
+        return socket.gethostbyname(KAFKA_HOST)
+    except Exception as e:
+        print(f"⚠️ Résolution DNS Kafka échouée : {e}")
+        return KAFKA_HOST
+
 
 def get_producer():
     global KAFKA_CONNECTED
+    if not os.path.exists("ca.pem") or not os.path.exists("service.cert") or not os.path.exists("service.key"):
+        print("❌ Certificats Kafka manquants (ca.pem/service.cert/service.key). Kafka désactivé.")
+        KAFKA_CONNECTED = False
+        return None
+
     ip = get_kafka_ip()
     target = f"{ip}:{KAFKA_PORT}"
+
     try:
+        print(f"🔌 Tentative de connexion à Kafka {target}...")
         p = KafkaProducer(
             bootstrap_servers=target,
             security_protocol="SSL",
@@ -67,9 +78,13 @@ def get_producer():
             request_timeout_ms=5000,
             connection_timeout_ms=5000
         )
+        # Force la connexion pour vérifier immédiatement
+        p.bootstrap_connected()
         KAFKA_CONNECTED = True
+        print("✅ Connecté à Kafka")
         return p
-    except:
+    except Exception as e:
+        print(f"❌ Échec connexion Kafka : {type(e).__name__} {e}")
         KAFKA_CONNECTED = False
         return None
 
@@ -109,29 +124,43 @@ def get_mock_analysis(headline):
 
 # --- WORKER MARKET ---
 def market_worker():
+    global KAFKA_CONNECTED
     print("📈 Worker Market actif")
     producer = get_producer()
     assets = {"GC=F": "XAU/USD", "EURUSD=X": "EUR/USD"}
     prices = {"XAU/USD": 2350.0, "EUR/USD": 1.0850}
     while True:
+        if not KAFKA_CONNECTED or producer is None:
+            producer = get_producer()
+
         for ticker, name in assets.items():
             try:
                 t = yf.Ticker(ticker); real_p = t.fast_info['last_price']
                 if real_p > 0: prices[name] = real_p
-            except: pass
+            except Exception as e:
+                print(f"⚠️ market_worker - yfinance erreur: {e}")
             jitter = random.uniform(-0.001, 0.001) if "EUR" in name else random.uniform(-0.5, 0.5)
             display_price = round(prices[name] + jitter, 4)
             msg = {"topic": "market-data", "asset": name, "price": display_price, "timestamp": int(time.time())}
             if KAFKA_CONNECTED and producer:
-                try: producer.send("market-data", value=msg)
-                except: pass
+                try:
+                    producer.send("market-data", value=msg)
+                except Exception as e:
+                    print(f"⚠️ market_worker - Kafka send fail: {e}")
+                    KAFKA_CONNECTED = False
             send_to_ws(msg)
-        if KAFKA_CONNECTED and producer: producer.flush()
+
+        if KAFKA_CONNECTED and producer:
+            try:
+                producer.flush()
+            except Exception as e:
+                print(f"⚠️ market_worker - Kafka flush fail: {e}")
+                KAFKA_CONNECTED = False
         time.sleep(1)
 
 # --- WORKER NEWS + AI ---
 def ai_news_worker():
-    global last_intelligence
+    global last_intelligence, KAFKA_CONNECTED
     print("🧠 Worker IA (Hybride) actif")
     
     if not GOOGLE_API_KEY:
@@ -150,6 +179,9 @@ def ai_news_worker():
     
     seen = set()
     while True:
+        if not KAFKA_CONNECTED or producer is None:
+            producer = get_producer()
+
         for url in RSS_SOURCES:
             try:
                 feed = feedparser.parse(url)
@@ -166,35 +198,64 @@ def ai_news_worker():
                             analysis = json.loads(txt)
                             print("✨ Gemini OK")
                         except Exception as e:
-                            print(f"⚠️ Mode Secours activé (Cause: {str(e)[:50]}...)")
+                            print(f"⚠️ Mode Secours activé (Cause: {str(e)[:100]}...)")
                             analysis = get_mock_analysis(entry.title)
                         
                         msg = {"topic": "analyzed-news", "headline": entry.title, "source": url.split('.')[1] if '.' in url else "RSS", **analysis}
                         last_intelligence = msg
                         if KAFKA_CONNECTED and producer:
-                            try: producer.send("analyzed-news", value=msg); producer.flush()
-                            except: pass
+                            try:
+                                producer.send("analyzed-news", value=msg)
+                                producer.flush()
+                            except Exception as e:
+                                print(f"⚠️ ai_news_worker - Kafka send/flush fail: {e}")
+                                KAFKA_CONNECTED = False
                         send_to_ws(msg)
                         seen.add(entry.title)
                         time.sleep(90)
                         break
-            except: continue
+            except Exception as e:
+                print(f"⚠️ ai_news_worker - feed error {url}: {e}")
+                continue
         time.sleep(30)
 
 # --- WORKER DB ---
 def db_worker():
-    if not MONGO_URI: return
+    global KAFKA_CONNECTED
+    if not MONGO_URI:
+        print("⚠️ db_worker : MONGO_URI manquant, DB désactivée")
+        return
+
     try:
         client = MongoClient(MONGO_URI)
         db = client['dji']
-        if KAFKA_CONNECTED:
-            consumer = KafkaConsumer("market-data", "analyzed-news", bootstrap_servers=KAFKA_URI, security_protocol="SSL", 
-                                     ssl_cafile="ca.pem", ssl_certfile="service.cert", 
-                                     ssl_keyfile="service.key", value_deserializer=lambda x: json.loads(x.decode('utf-8')))
+    except Exception as e:
+        print(f"❌ db_worker : échec connexion MongoDB {e}")
+        return
+
+    while True:
+        if not KAFKA_CONNECTED:
+            time.sleep(5)
+            continue
+
+        try:
+            consumer = KafkaConsumer(
+                "market-data", "analyzed-news",
+                bootstrap_servers=KAFKA_URI,
+                security_protocol="SSL",
+                ssl_cafile="ca.pem",
+                ssl_certfile="service.cert",
+                ssl_keyfile="service.key",
+                value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+            )
+            print("✅ db_worker : KafkaConsumer démarré")
             for message in consumer:
                 coll = db['market_history'] if message.topic == "market-data" else db['news_history']
                 coll.insert_one(message.value)
-    except: pass
+        except Exception as e:
+            print(f"⚠️ db_worker : KafkaConsumer erreur {e}")
+            KAFKA_CONNECTED = False
+            time.sleep(5)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

@@ -144,7 +144,9 @@
 
     <script>
         const wsHost = window.location.hostname || '127.0.0.1';
-        const socket = new WebSocket(`ws://${wsHost}:8000/ws`);
+        const wsPort = window.location.port || '7860';
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const socket = new WebSocket(`${wsProtocol}://${wsHost}:${wsPort}/ws`);
         let lastPrices = { 'XAU/USD': 0, 'EUR/USD': 0 };
 
         socket.onmessage = function(event) {
