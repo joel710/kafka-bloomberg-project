@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel Hub V2 | AI & Markets</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-blue: #007AFF;
+            --accent-gold: #FFD700;
+            --accent-green: #34C759;
+            --accent-red: #FF3B30;
+            --text-main: #FFFFFF;
+            --text-dim: rgba(255, 255, 255, 0.6);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+
+        body {
+            background: #000;
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .bg-glow {
+            position: fixed; width: 600px; height: 600px;
+            background: radial-gradient(circle, rgba(0, 122, 255, 0.1) 0%, transparent 70%);
+            top: -100px; right: -100px; z-index: -1; filter: blur(80px);
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .header h1 { font-size: 1.8rem; background: linear-gradient(to right, #fff, #666); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+        .dashboard { display: grid; grid-template-columns: 350px 1fr; gap: 20px; }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 20px;
+        }
+
+        /* Liste des Actifs */
+        .asset-list { display: flex; flex-direction: column; gap: 10px; }
+        .asset-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.03);
+            border: 1px solid transparent; transition: all 0.3s;
+        }
+        .asset-item:hover { border-color: var(--glass-border); background: rgba(255,255,255,0.05); }
+        .asset-name { font-weight: 600; font-size: 0.9rem; }
+        .asset-price { font-family: monospace; font-size: 1.1rem; font-weight: 700; }
+
+        /* Intelligence Area */
+        .intelligence-grid { display: grid; grid-template-rows: auto 1fr; gap: 20px; }
+        .recommendation-panel {
+            background: linear-gradient(135deg, rgba(0, 122, 255, 0.15), rgba(255, 255, 255, 0.02));
+            border: 1px solid var(--accent-blue);
+            padding: 30px; border-radius: 24px; text-align: center;
+        }
+        .rec-action { font-size: 2.5rem; font-weight: 800; color: var(--accent-gold); margin: 10px 0; }
+
+        .news-feed { overflow-y: auto; max-height: 500px; display: flex; flex-direction: column; gap: 10px; }
+        .news-item { padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.02); border-left: 3px solid var(--accent-blue); }
+        
+        .price-up { color: var(--accent-green); }
+        .price-down { color: var(--accent-red); }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0px rgba(0, 122, 255, 0); }
+            50% { box-shadow: 0 0 20px rgba(0, 122, 255, 0.3); }
+            100% { box-shadow: 0 0 0px rgba(0, 122, 255, 0); }
+        }
+        .pulse { animation: pulse-glow 2s infinite; }
+    </style>
+</head>
+<body>
+    <div class="bg-glow"></div>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>Sentinel V2</h1>
+                <p style="font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase;">Multisector Intel Hub</p>
+            </div>
+            <div id="status" style="font-size: 0.8rem; color: var(--accent-green);">● SYSTÈME ACTIF</div>
+        </div>
+
+        <div class="dashboard">
+            <div class="market-panel glass-card">
+                <h3 style="margin-bottom: 15px; font-size: 1rem;">Marchés Temps Réel</h3>
+                <div id="asset-container" class="asset-list">
+                    <!-- Les actifs seront injectés ici -->
+                </div>
+            </div>
+
+            <div class="intelligence-grid">
+                <div class="recommendation-panel glass-card pulse">
+                    <p style="text-transform: uppercase; color: var(--accent-blue); font-size: 0.8rem; letter-spacing: 2px;">Focus IA Sentinel</p>
+                    <div id="ai-rec" class="rec-action">ANALYSE...</div>
+                    <div id="ai-reason" style="font-size: 1rem; color: var(--text-dim);">Prêt pour le prochain signal.</div>
+                </div>
+
+                <div class="glass-card">
+                    <h3 style="margin-bottom: 15px; font-size: 1rem;">Dernières Analyses (Tech & Macro)</h3>
+                    <div id="news-feed" class="news-feed">
+                        <!-- Les news IA seront ici -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const socket = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
+        const prices = {};
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.topic === 'market-data') updateMarket(data);
+            if (data.topic === 'analyzed-news') updateAI(data);
+        };
+
+        function updateMarket(data) {
+            let el = document.getElementById(`price-${data.asset}`);
+            if (!el) {
+                const container = document.getElementById('asset-container');
+                const div = document.createElement('div');
+                div.className = 'asset-item';
+                div.innerHTML = `
+                    <span class="asset-name">${data.asset}</span>
+                    <span id="price-${data.asset}" class="asset-price">---</span>
+                `;
+                container.appendChild(div);
+                el = document.getElementById(`price-${data.asset}`);
+            }
+
+            const currentPrice = parseFloat(data.price);
+            const lastPrice = prices[data.asset] || currentPrice;
+            
+            el.innerText = data.price.toLocaleString(undefined, { minimumFractionDigits: 2 });
+            el.className = 'asset-price ' + (currentPrice >= lastPrice ? 'price-up' : 'price-down');
+            prices[data.asset] = currentPrice;
+        }
+
+        function updateAI(data) {
+            document.getElementById('ai-rec').innerText = data.recommendation;
+            document.getElementById('ai-reason').innerText = data.reason;
+            
+            const feed = document.getElementById('news-feed');
+            const item = document.createElement('div');
+            item.className = 'news-item';
+            item.innerHTML = `
+                <div style="font-weight: 700; margin-bottom: 5px;">${data.headline}</div>
+                <div style="font-size: 0.8rem; color: var(--text-dim);">${data.reason}</div>
+            `;
+            feed.prepend(item);
+            if (feed.children.length > 10) feed.removeChild(feed.lastChild);
+        }
+    </script>
+</body>
+</html>
