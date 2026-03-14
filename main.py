@@ -24,8 +24,25 @@ KAFKA_HOST = "kafka-4238954-kafka-2c1f.h.aivencloud.com"
 KAFKA_PORT = 17498
 KAFKA_URI = f"{KAFKA_HOST}:{KAFKA_PORT}"
 KAFKA_FOLDER = "./"
+
+# Gestion des certificats pour le Cloud (Render)
+# Si les fichiers n'existent pas, on essaie de les lire depuis les variables d'environnement
+def ensure_certs():
+    certs = {
+        "ca.pem": os.getenv("KAFKA_CA_PEM"),
+        "service.cert": os.getenv("KAFKA_SERVICE_CERT"),
+        "service.key": os.getenv("KAFKA_SERVICE_KEY")
+    }
+    for filename, content in certs.items():
+        if content and not os.path.exists(filename):
+            with open(filename, "w") as f:
+                f.write(content)
+            print(f"✅ Certificat {filename} généré depuis l'environnement")
+
+ensure_certs()
+
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-MONGO_URI = "mongodb+srv://jelise710_db_user:msi2025@dji.pzrvgeg.mongodb.net/?appName=dji"
+MONGO_URI = os.getenv("MONGO_URI") or "mongodb+srv://jelise710_db_user:msi2025@dji.pzrvgeg.mongodb.net/?appName=dji"
 
 ws_clients = []
 KAFKA_CONNECTED = False
@@ -38,15 +55,17 @@ def get_kafka_ip():
 
 def get_producer():
     global KAFKA_CONNECTED
+    if not os.path.exists("ca.pem"):
+        return None
     ip = get_kafka_ip()
     target = f"{ip}:{KAFKA_PORT}"
     try:
         p = KafkaProducer(
             bootstrap_servers=target,
             security_protocol="SSL",
-            ssl_cafile=KAFKA_FOLDER + "ca.pem",
-            ssl_certfile=KAFKA_FOLDER + "service.cert",
-            ssl_keyfile=KAFKA_FOLDER + "service.key",
+            ssl_cafile="ca.pem",
+            ssl_certfile="service.cert",
+            ssl_keyfile="service.key",
             value_serializer=lambda v: json.dumps(v).encode('utf-8'),
             request_timeout_ms=5000,
             connection_timeout_ms=5000
@@ -65,26 +84,14 @@ def send_to_ws(data):
                 asyncio.run_coroutine_threadsafe(client.send_json(data), main_loop)
             except: pass
 
-# --- MOCK IA (En cas de quota épuisé) ---
+# --- MOCK IA ---
 def get_mock_analysis(headline):
     h = headline.lower()
-    res = {
-        "impact_gold": "NEUTRAL", "impact_eur": "NEUTRAL", 
-        "recommendation": "ATTENDRE", "reason": "Analyse technique standard.", 
-        "forecast": "Marché en consolidation."
-    }
+    res = {"impact_gold": "NEUTRAL", "impact_eur": "NEUTRAL", "recommendation": "ATTENDRE", "reason": "Analyse technique standard.", "forecast": "Consolidation."}
     if any(w in h for w in ["fed", "rate", "inflation", "dollar", "usd"]):
-        res = {
-            "impact_gold": "BEARISH", "impact_eur": "BULLISH",
-            "recommendation": "VENTE OR", "reason": "Corrélation inverse avec le Dollar US suite aux news macro.",
-            "forecast": "Pression vendeuse sur les métaux précieux."
-        }
-    elif any(w in h for w in ["war", "crisis", "conflict", "uncertainty"]):
-        res = {
-            "impact_gold": "BULLISH", "impact_eur": "NEUTRAL",
-            "recommendation": "ACHETER OR", "reason": "Hausse de la demande pour les valeurs refuges.",
-            "forecast": "Volatilité haussière attendue sur l'Or."
-        }
+        res = {"impact_gold": "BEARISH", "impact_eur": "BULLISH", "recommendation": "VENTE OR", "reason": "Renforcement du Dollar.", "forecast": "Pression sur l'Or."}
+    elif any(w in h for w in ["war", "crisis", "conflict"]):
+        res = {"impact_gold": "BULLISH", "impact_eur": "NEUTRAL", "recommendation": "ACHETER OR", "reason": "Valeur refuge.", "forecast": "Volatilité haussière."}
     return res
 
 # --- WORKER MARKET ---
@@ -112,14 +119,11 @@ def market_worker():
 def ai_news_worker():
     global last_intelligence
     if not GOOGLE_API_KEY: return
-    print("🧠 Worker IA: Mode Hybride Activé")
     producer = get_producer()
     client = genai.Client(api_key=GOOGLE_API_KEY)
     model_id = "gemini-2.0-flash"
-    
     RSS_SOURCES = ["https://www.cnbc.com/id/10000664/device/rss/rss.html", "https://www.yahoo.com/news/rss/finance"]
     seen = set()
-    
     while True:
         for url in RSS_SOURCES:
             try:
@@ -127,17 +131,14 @@ def ai_news_worker():
                 if feed.entries:
                     entry = feed.entries[0]
                     if entry.title not in seen:
-                        print(f"🔍 ANALYSE : {entry.title[:50]}...")
                         try:
-                            prompt = f"Expert Macro. Analyse: '{entry.title}'. Réponds en FRANÇAIS, UNIQUEMENT en JSON: {{'impact_gold': 'BULLISH|BEARISH|NEUTRAL', 'impact_eur': 'BULLISH|BEARISH|NEUTRAL', 'recommendation': 'ACHETER OR|VENTE OR|ACHETER EURO|VENTE EURO|ATTENDRE', 'reason': 'causalité courte', 'forecast': 'sentiment'}}"
+                            prompt = f"Expert Macro. Analyse: '{entry.title}'. JSON: {{'impact_gold': 'B/B/N', 'impact_eur': 'B/B/N', 'recommendation': 'A/V/A', 'reason': 'short', 'forecast': 'sentiment'}}"
                             response = client.models.generate_content(model=model_id, contents=prompt)
                             txt = response.text.strip()
                             if "```json" in txt: txt = txt.split("```json")[1].split("```")[0]
-                            elif "```" in txt: txt = txt.split("```")[1].split("```")[0]
                             analysis = json.loads(txt)
-                        except Exception as e:
+                        except:
                             analysis = get_mock_analysis(entry.title)
-                        
                         msg = {"topic": "analyzed-news", "headline": entry.title, "source": "Expert Flow", **analysis}
                         last_intelligence = msg
                         if KAFKA_CONNECTED and producer:
@@ -150,22 +151,20 @@ def ai_news_worker():
             except: continue
         time.sleep(30)
 
-# --- WORKER DB (Archiviste) ---
+# --- WORKER DB ---
 def db_worker():
     if not MONGO_URI: return
-    print("💾 Worker DB: Start")
     try:
         client = MongoClient(MONGO_URI)
         db = client['dji']
         if KAFKA_CONNECTED:
             consumer = KafkaConsumer("market-data", "analyzed-news", bootstrap_servers=KAFKA_URI, security_protocol="SSL", 
-                                     ssl_cafile=KAFKA_FOLDER + "ca.pem", ssl_certfile=KAFKA_FOLDER + "service.cert", 
-                                     ssl_keyfile=KAFKA_FOLDER + "service.key", value_deserializer=lambda x: json.loads(x.decode('utf-8')))
+                                     ssl_cafile="ca.pem", ssl_certfile="service.cert", 
+                                     ssl_keyfile="service.key", value_deserializer=lambda x: json.loads(x.decode('utf-8')))
             for message in consumer:
                 coll = db['market_history'] if message.topic == "market-data" else db['news_history']
                 coll.insert_one(message.value)
-    except Exception as e:
-        print(f"DB Worker Error: {e}")
+    except: pass
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -194,4 +193,6 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in ws_clients: ws_clients.remove(websocket)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Render utilise la variable d'environnement PORT
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
