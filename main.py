@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from kafka import KafkaConsumer, KafkaProducer
 from pymongo import MongoClient
 
+# 1. Charger le .env
 load_dotenv()
 
 # --- CONFIGURATION ---
@@ -26,12 +27,26 @@ KAFKA_URI = f"{KAFKA_HOST}:{KAFKA_PORT}"
 KAFKA_FOLDER = "./"
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+if GOOGLE_API_KEY:
+    print(f"🔑 Clé API détectée : {GOOGLE_API_KEY[:5]}...{GOOGLE_API_KEY[-5:]}")
+
 MONGO_URI = os.getenv("MONGO_URI") or "mongodb+srv://jelise710_db_user:msi2025@dji.pzrvgeg.mongodb.net/?appName=dji"
 
 ws_clients = []
 KAFKA_CONNECTED = False
 main_loop = None
-last_intelligence = None 
+
+# On initialise un message de démarrage pro
+last_intelligence = {
+    "topic": "analyzed-news",
+    "headline": "Sentinel Hub : Connexion au réseau financier",
+    "source": "System",
+    "impact_gold": "NEUTRAL",
+    "impact_eur": "NEUTRAL",
+    "recommendation": "OBSERVATION",
+    "reason": "Initialisation du moteur d'analyse macro-économique.",
+    "forecast": "Le terminal est prêt."
+}
 
 def get_kafka_ip():
     try: return socket.gethostbyname(KAFKA_HOST)
@@ -39,9 +54,6 @@ def get_kafka_ip():
 
 def get_producer():
     global KAFKA_CONNECTED
-    # Les fichiers sont présents dans le repo
-    if not os.path.exists("ca.pem"):
-        return None
     ip = get_kafka_ip()
     target = f"{ip}:{KAFKA_PORT}"
     try:
@@ -56,7 +68,6 @@ def get_producer():
             connection_timeout_ms=5000
         )
         KAFKA_CONNECTED = True
-        print("✅ Kafka Connecté")
         return p
     except:
         KAFKA_CONNECTED = False
@@ -69,18 +80,36 @@ def send_to_ws(data):
                 asyncio.run_coroutine_threadsafe(client.send_json(data), main_loop)
             except: pass
 
-# --- MOCK IA ---
 def get_mock_analysis(headline):
     h = headline.lower()
-    res = {"impact_gold": "NEUTRAL", "impact_eur": "NEUTRAL", "recommendation": "ATTENDRE", "reason": "Analyse technique standard.", "forecast": "Consolidation."}
-    if any(w in h for w in ["fed", "rate", "inflation", "dollar", "usd"]):
-        res = {"impact_gold": "BEARISH", "impact_eur": "BULLISH", "recommendation": "VENTE OR", "reason": "Renforcement du Dollar.", "forecast": "Pression sur l'Or."}
-    elif any(w in h for w in ["war", "crisis", "conflict"]):
-        res = {"impact_gold": "BULLISH", "impact_eur": "NEUTRAL", "recommendation": "ACHETER OR", "reason": "Valeur refuge.", "forecast": "Volatilité haussière."}
-    return res
+    # Mock IA expert pour la démo
+    if any(w in h for w in ["dividend", "stock", "earn", "yield"]):
+        return {
+            "impact_gold": "NEUTRAL", "impact_eur": "BULLISH",
+            "recommendation": "ACHETER EURO", "reason": "La solidité des rendements actions soutient la devise européenne.",
+            "forecast": "Hausse technique de l'Euro à court terme."
+        }
+    if any(w in h for w in ["fed", "rate", "inflation", "dollar", "usd", "cpi"]):
+        return {
+            "impact_gold": "BEARISH", "impact_eur": "BULLISH",
+            "recommendation": "VENTE OR", "reason": "La politique monétaire US renforce le Dollar au détriment de l'Or.",
+            "forecast": "Pression vendeuse sur les métaux."
+        }
+    if any(w in h for w in ["war", "crisis", "conflict", "iran", "israel", "geopolitical"]):
+        return {
+            "impact_gold": "BULLISH", "impact_eur": "NEUTRAL",
+            "recommendation": "ACHETER OR", "reason": "Tensions mondiales : l'Or joue son rôle de valeur refuge.",
+            "forecast": "Forte volatilité haussière attendue."
+        }
+    return {
+        "impact_gold": "NEUTRAL", "impact_eur": "NEUTRAL", 
+        "recommendation": "ATTENDRE", "reason": "News à impact modéré. Analyse technique standard.", 
+        "forecast": "Marché en consolidation."
+    }
 
 # --- WORKER MARKET ---
 def market_worker():
+    print("📈 Worker Market actif")
     producer = get_producer()
     assets = {"GC=F": "XAU/USD", "EURUSD=X": "EUR/USD"}
     prices = {"XAU/USD": 2350.0, "EUR/USD": 1.0850}
@@ -90,7 +119,7 @@ def market_worker():
                 t = yf.Ticker(ticker); real_p = t.fast_info['last_price']
                 if real_p > 0: prices[name] = real_p
             except: pass
-            jitter = random.uniform(-0.0008, 0.0008) if "EUR" in name else random.uniform(-0.4, 0.4)
+            jitter = random.uniform(-0.001, 0.001) if "EUR" in name else random.uniform(-0.5, 0.5)
             display_price = round(prices[name] + jitter, 4)
             msg = {"topic": "market-data", "asset": name, "price": display_price, "timestamp": int(time.time())}
             if KAFKA_CONNECTED and producer:
@@ -103,11 +132,22 @@ def market_worker():
 # --- WORKER NEWS + AI ---
 def ai_news_worker():
     global last_intelligence
-    if not GOOGLE_API_KEY: return
+    print("🧠 Worker IA (Hybride) actif")
+    
+    if not GOOGLE_API_KEY:
+        print("❌ Worker IA arrêté : Pas de clé API")
+        return
+
     producer = get_producer()
     client = genai.Client(api_key=GOOGLE_API_KEY)
     model_id = "gemini-2.0-flash"
-    RSS_SOURCES = ["https://www.cnbc.com/id/10000664/device/rss/rss.html", "https://www.yahoo.com/news/rss/finance"]
+    
+    RSS_SOURCES = [
+        "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+        "https://www.investing.com/rss/news_1.rss",
+        "https://www.yahoo.com/news/rss/finance"
+    ]
+    
     seen = set()
     while True:
         for url in RSS_SOURCES:
@@ -116,15 +156,20 @@ def ai_news_worker():
                 if feed.entries:
                     entry = feed.entries[0]
                     if entry.title not in seen:
+                        print(f"🔥 Analyse : {entry.title[:50]}...")
                         try:
-                            prompt = f"Expert Macro. Analyse: '{entry.title}'. JSON: {{'impact_gold': 'B/B/N', 'impact_eur': 'B/B/N', 'recommendation': 'A/V/A', 'reason': 'short', 'forecast': 'sentiment'}}"
+                            prompt = f"Expert Macro. Analyse: '{entry.title}'. Réponds en FRANÇAIS, UNIQUEMENT en JSON: {{'impact_gold': 'BULLISH|BEARISH|NEUTRAL', 'impact_eur': 'BULLISH|BEARISH|NEUTRAL', 'recommendation': 'ACHETER OR|VENTE OR|ACHETER EURO|VENTE EURO|ATTENDRE', 'reason': 'causalité courte', 'forecast': 'sentiment'}}"
                             response = client.models.generate_content(model=model_id, contents=prompt)
                             txt = response.text.strip()
                             if "```json" in txt: txt = txt.split("```json")[1].split("```")[0]
+                            elif "```" in txt: txt = txt.split("```")[1].split("```")[0]
                             analysis = json.loads(txt)
-                        except:
+                            print("✨ Gemini OK")
+                        except Exception as e:
+                            print(f"⚠️ Mode Secours activé (Cause: {str(e)[:50]}...)")
                             analysis = get_mock_analysis(entry.title)
-                        msg = {"topic": "analyzed-news", "headline": entry.title, "source": "Expert Flow", **analysis}
+                        
+                        msg = {"topic": "analyzed-news", "headline": entry.title, "source": url.split('.')[1] if '.' in url else "RSS", **analysis}
                         last_intelligence = msg
                         if KAFKA_CONNECTED and producer:
                             try: producer.send("analyzed-news", value=msg); producer.flush()
@@ -170,7 +215,12 @@ async def get_dashboard():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     ws_clients.append(websocket)
-    if last_intelligence: await websocket.send_json(last_intelligence)
+    
+    # ENVOI IMMEDIAT DE LA DERNIERE INTELLIGENCE
+    if last_intelligence:
+        print(f"📤 Envoi cache au nouveau client : {last_intelligence['headline'][:30]}...")
+        await websocket.send_json(last_intelligence)
+        
     try:
         while True: await websocket.receive_text()
     except: pass
