@@ -228,5 +228,5 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in ws_clients: ws_clients.remove(websocket)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 7860))
     uvicorn.run(app, host="0.0.0.0", port=port)
