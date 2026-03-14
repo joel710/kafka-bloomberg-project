@@ -1,3 +1,12 @@
+---
+title: Forex Sentinel
+emoji: 🌍
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # 🌍 Forex Sentinel: Intelligence de Marché Temps Réel (Kafka & IA)
 
 Forex Sentinel est un terminal d'analyse financière de pointe fusionnant le streaming de données temps réel (Apache Kafka) et l'intelligence artificielle générative (Gemini 2.0). Il transforme des flux bruts de prix et d'actualités en recommandations d'investissement explicites.
