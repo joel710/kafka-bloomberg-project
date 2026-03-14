@@ -25,22 +25,6 @@ KAFKA_PORT = 17498
 KAFKA_URI = f"{KAFKA_HOST}:{KAFKA_PORT}"
 KAFKA_FOLDER = "./"
 
-# Gestion des certificats pour le Cloud (Render)
-# Si les fichiers n'existent pas, on essaie de les lire depuis les variables d'environnement
-def ensure_certs():
-    certs = {
-        "ca.pem": os.getenv("KAFKA_CA_PEM"),
-        "service.cert": os.getenv("KAFKA_SERVICE_CERT"),
-        "service.key": os.getenv("KAFKA_SERVICE_KEY")
-    }
-    for filename, content in certs.items():
-        if content and not os.path.exists(filename):
-            with open(filename, "w") as f:
-                f.write(content)
-            print(f"✅ Certificat {filename} généré depuis l'environnement")
-
-ensure_certs()
-
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 MONGO_URI = os.getenv("MONGO_URI") or "mongodb+srv://jelise710_db_user:msi2025@dji.pzrvgeg.mongodb.net/?appName=dji"
 
@@ -55,6 +39,7 @@ def get_kafka_ip():
 
 def get_producer():
     global KAFKA_CONNECTED
+    # Les fichiers sont présents dans le repo
     if not os.path.exists("ca.pem"):
         return None
     ip = get_kafka_ip()
@@ -193,6 +178,5 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in ws_clients: ws_clients.remove(websocket)
 
 if __name__ == "__main__":
-    # Render utilise la variable d'environnement PORT
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)

@@ -8,12 +8,6 @@ services:
       - key: PORT
         value: 8000
       - key: GOOGLE_API_KEY
-        sync: false # À configurer dans le dashboard Render
+        sync: false # À mettre dans le dashboard Render
       - key: MONGO_URI
-        sync: false # À configurer dans le dashboard Render
-      - key: KAFKA_CA_PEM
-        sync: false
-      - key: KAFKA_SERVICE_CERT
-        sync: false
-      - key: KAFKA_SERVICE_KEY
-        sync: false
+        sync: false # À mettre dans le dashboard Render
